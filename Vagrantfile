@@ -41,7 +41,7 @@ $spark_deps = <<SCRIPT
 
   if [ ! -e ${SPARK_LINK} ]; then
     echo "Spark installation..."
-    if [ "$(ls -la /vagrant/spark/${SPARK_VER}.tgz | wc -l)" == "1" ]; then
+    if [ "$(ls -la /vagrant/spark/ | grep ${SPARK_VER}.tgz | wc -l)" == "1" ]; then
       cp -f /vagrant/spark/${SPARK_VER}.tgz /tmp/
     else
       wget http://d3kbcqa49mib13.cloudfront.net/${SPARK_VER}.tgz -q -P /tmp/
