@@ -1,34 +1,14 @@
-# MySQL dependencies
-$mysql_deps = <<SCRIPT
+# Anaconda dependencies
+$anaconda_deps = <<SCRIPT
 
-  MYSQL_REPO=https://dev.mysql.com/get/mysql-community-release-el6-5.noarch.rpm
-  MY_CNF=/etc/my.cnf
-  DEV_PASSWORD=hadoop
+  ANACONDA_INSTALLER=https://3230d63b5fc54e62148e-c95ac804525aac4b6dba79b00b39d1d3.ssl.cf1.rackcdn.com/Anaconda-2.3.0-Linux-x86_64.sh
 
-  [ ! -e /etc/yum.repos.d/mysql-community.repo ] && rpm -ivh ${MYSQL_REPO}
-
-  yum install -y mysql-community-server
-
-  if [ -e /etc/init.d/mysqld ] && [ -z "$(grep -R vagrant ${MY_CNF})" ]; then
-    echo "# InnoDB settings" >> ${MY_CNF}
-    echo "default_storage_engine = innodb" >> ${MY_CNF}
-    echo "innodb_file_per_table = 1" >> ${MY_CNF}
-    echo "innodb_flush_log_at_trx_commit = 2" >> ${MY_CNF}
-    echo "innodb_log_buffer_size = 64M" >> ${MY_CNF}
-    echo "innodb_buffer_pool_size = 1G" >> ${MY_CNF}
-    echo "innodb_thread_concurrency = 8" >> ${MY_CNF}
-    echo "innodb_flush_method = O_DIRECT" >> ${MY_CNF}
-    echo "innodb_log_file_size = 512M" >> ${MY_CNF}
-    echo "explicit_defaults_for_timestamp = 1" >> ${MY_CNF}
-    chkconfig mysqld on \
-      && service mysqld start \
-      && /usr/bin/mysqladmin -u root password "${DEV_PASSWORD}" &> /dev/null \
-      && echo "# vagrant provisioned" >> ${MY_CNF}
-
-    mysql -u root -p${DEV_PASSWORD} \
-      -e "create schema if not exists hive; grant all on hive.* to 'hive'@'localhost' identified by 'hive'" \
-    && mysql -u root -p${DEV_PASSWORD} \
-      -e "create schema if not exists oozie; grant all on oozie.* to 'oozie'@'localhost' identified by 'oozie'"
+  if [ ! -d "/usr/local/anaconda" ]; then
+    echo "Anaconda installation..." \
+      && echo "downloading binaries" \
+      && wget ${ANACONDA_INSTALLER} -q -P /tmp/ \
+      && echo "running installer" \
+      && bash /tmp/Anaconda-2.3.0-Linux-x86_64.sh -b -f -p /usr/local/anaconda
   fi
 
 SCRIPT
@@ -131,6 +111,41 @@ HIVECNF
 
 SCRIPT
 
+# MySQL dependencies
+$mysql_deps = <<SCRIPT
+
+  MYSQL_REPO=https://dev.mysql.com/get/mysql-community-release-el6-5.noarch.rpm
+  MY_CNF=/etc/my.cnf
+  DEV_PASSWORD=hadoop
+
+  [ ! -e /etc/yum.repos.d/mysql-community.repo ] && rpm -ivh ${MYSQL_REPO}
+
+  yum install -y mysql-community-server
+
+  if [ -e /etc/init.d/mysqld ] && [ -z "$(grep -R vagrant ${MY_CNF})" ]; then
+    echo "# InnoDB settings" >> ${MY_CNF}
+    echo "default_storage_engine = innodb" >> ${MY_CNF}
+    echo "innodb_file_per_table = 1" >> ${MY_CNF}
+    echo "innodb_flush_log_at_trx_commit = 2" >> ${MY_CNF}
+    echo "innodb_log_buffer_size = 64M" >> ${MY_CNF}
+    echo "innodb_buffer_pool_size = 1G" >> ${MY_CNF}
+    echo "innodb_thread_concurrency = 8" >> ${MY_CNF}
+    echo "innodb_flush_method = O_DIRECT" >> ${MY_CNF}
+    echo "innodb_log_file_size = 512M" >> ${MY_CNF}
+    echo "explicit_defaults_for_timestamp = 1" >> ${MY_CNF}
+    chkconfig mysqld on \
+      && service mysqld start \
+      && /usr/bin/mysqladmin -u root password "${DEV_PASSWORD}" &> /dev/null \
+      && echo "# vagrant provisioned" >> ${MY_CNF}
+
+    mysql -u root -p${DEV_PASSWORD} \
+      -e "create schema if not exists hive; grant all on hive.* to 'hive'@'localhost' identified by 'hive'" \
+    && mysql -u root -p${DEV_PASSWORD} \
+      -e "create schema if not exists oozie; grant all on oozie.* to 'oozie'@'localhost' identified by 'oozie'"
+  fi
+
+SCRIPT
+
 # Cloudera CDH dependencies
 $cloudera_deps = <<SCRIPT
 
@@ -140,6 +155,11 @@ $cloudera_deps = <<SCRIPT
   [ ! -e /etc/yum.repos.d/cloudera-cdh5.repo ] \
     && wget ${CLOUDERA_REPO} -q -P /etc/yum.repos.d/
 
+  # Cloudera seems to kill fast download ops so we throttle Yum
+  if [ "$(grep throttle /etc/yum.conf | wc -l)" == "0" ]; then
+    echo "throttle=3M" >> /etc/yum.conf
+  fi
+
   # Cloudera Hadoop installation
   yum install -y java-1.7.0-openjdk java-1.7.0-openjdk-devel hadoop \
   hadoop-conf-pseudo hadoop-hdfs-datanode hadoop-hdfs-journalnode  \
@@ -147,14 +167,14 @@ $cloudera_deps = <<SCRIPT
   hadoop-libhdfs-devel hadoop-mapreduce-historyserver hadoop-yarn-nodemanager \
   hadoop-yarn-resourcemanager zookeeper zookeeper-native zookeeper-server \
   oozie oozie-client kite sqoop hive hive-metastore hive-server2 hive-hcatalog \
-  hive-jdbc avro-libs pig kite impala*
+  hive-jdbc avro-libs pig kite impala* openssl-devel openssl
 
   cat << HDPCNF > /etc/hadoop/conf/mapred-site.xml
 
 <configuration>
 <property>
   <name>mapred.job.tracker</name>
-  <value>localhost:8021</value>
+  <value>cdh.instance.com:8021</value>
 </property>
 <property>
   <name>mapreduce.framework.name</name>
@@ -162,11 +182,11 @@ $cloudera_deps = <<SCRIPT
 </property>
 <property>
   <name>mapreduce.jobhistory.address</name>
-  <value>localhost:10020</value>
+  <value>cdh.instance.com:10020</value>
 </property>
 <property>
   <name>mapreduce.jobhistory.webapp.address</name>
-  <value>localhost:19888</value>
+  <value>cdh.instance.com:19888</value>
 </property>
 <property>
   <name>mapreduce.task.tmp.dir</name>
@@ -179,6 +199,10 @@ $cloudera_deps = <<SCRIPT
 <property>
   <name>mapreduce.reduce.memory.mb</name>
   <value>512</value>
+</property>
+<property>
+  <name>yarn.app.mapreduce.am.staging-dir</name>
+  <value>/user</value>
 </property>
 </configuration>
 
@@ -229,6 +253,65 @@ HDPCNF
 </configuration>
 
 YRNCNF
+
+  cat << HDFSCNF > /etc/hadoop/conf/hdfs-site.xml
+
+   <configuration>
+     <property>
+       <name>dfs.replication</name>
+       <value>1</value>
+     </property>
+     <property>
+       <name>dfs.safemode.extension</name>
+       <value>0</value>
+     </property>
+     <property>
+        <name>dfs.safemode.min.datanodes</name>
+        <value>1</value>
+     </property>
+     <property>
+        <name>hadoop.tmp.dir</name>
+        <value>/var/lib/hadoop-hdfs/cache/\\${user.name}</value>
+     </property>
+     <property>
+        <name>dfs.namenode.name.dir</name>
+        <value>file:///var/lib/hadoop-hdfs/cache/\\${user.name}/dfs/name</value>
+     </property>
+     <property>
+        <name>dfs.namenode.checkpoint.dir</name>
+        <value>file:///var/lib/hadoop-hdfs/cache/\\${user.name}/dfs/namesecondary</value>
+     </property>
+     <property>
+        <name>dfs.datanode.data.dir</name>
+        <value>file:///var/lib/hadoop-hdfs/cache/\\${user.name}/dfs/data</value>
+     </property>
+     <property>
+       <name>dfs.client.read.shortcircuit</name>
+       <value>true</value>
+     </property>
+     <property>
+       <name>dfs.client.file-block-storage-locations.timeout.millis</name>
+       <value>10000</value>
+     </property>
+     <property>
+       <name>dfs.domain.socket.path</name>
+       <value>/var/run/hadoop-hdfs/dn._PORT</value>
+     </property>
+     <property>
+       <name>dfs.datanode.hdfs-blocks-metadata.enabled</name>
+       <value>true</value>
+     </property>
+     <property>
+       <name>dfs.namenode.rpc-bind-host</name>
+       <value>0.0.0.0</value>
+     </property>
+     <property>
+       <name>dfs.namenode.acls.enabled</name>
+       <value>true</value>
+     </property>
+   </configuration>
+
+HDFSCNF
 
   # format namenode
   if [ ! -e /var/lib/hadoop-hdfs/cache/hdfs ]; then
@@ -285,6 +368,7 @@ HIVECNF
     && chkconfig hadoop-hdfs-datanode on \
     && chkconfig hadoop-yarn-resourcemanager on \
     && chkconfig hadoop-yarn-nodemanager on \
+    && chkconfig hadoop-mapreduce-historyserver on \
     && chkconfig hive-metastore on \
     && chkconfig hive-server2 on \
     && chkconfig oozie on
@@ -307,17 +391,19 @@ HIVECNF
   fi
 
   echo "Creating HDFS directory structure" \
-    &&sudo -u hdfs hdfs dfs -mkdir -p /user \
-    && sudo -u hdfs hdfs dfs -chmod -R 777 /user \
-    && sudo -u hdfs hdfs dfs -mkdir -p /user/spark \
-    && sudo -u hdfs hdfs dfs -chmod -R 755 /user/spark \
-    && sudo -u hdfs hdfs dfs -mkdir -p /tmp \
-    && sudo -u hdfs hdfs dfs -chmod -R 777 /tmp \
-    && sudo -u hdfs hdfs dfs -mkdir -p /user/hive/warehouse \
+    && sudo -u hdfs hdfs dfs -mkdir -p {/user/{hadoop_oozie,spark,hive/warehouse,oozie/share/lib},/tmp,/jobs,/var/log/hadoop-yarn,/user/history} \
     && sudo -u hdfs hdfs dfs -chown -R hive:hive /user/hive \
-    && sudo -u hdfs hdfs dfs -chmod -R 755 /user/hive/warehouse \
-    && sudo -u hdfs hdfs dfs -mkdir -p /user/oozie/share/lib \
-    && sudo -u hdfs hdfs dfs -chown -R oozie:oozie /user/oozie
+    && sudo -u hdfs hdfs dfs -chown -R mapred:hadoop /user/history \
+    && sudo -u hdfs hdfs dfs -chmod -R 1777 /user/history \
+    && sudo -u hdfs hdfs dfs -chown -R oozie:oozie /user/oozie \
+    && sudo -u hdfs hdfs dfs -chown -R hadoop_oozie:hadoop_oozie /user/hadoop_oozie \
+    && sudo -u hdfs hdfs dfs -chown -R yarn:mapred /var/log/hadoop-yarn \
+    && sudo -u hdfs hdfs dfs -chmod -R 1777 /
+
+  # history server must start after hdfs privileges have been setup
+  if [ ! "$(ps aux | grep historyserver | wc -l)" == "2" ]; then
+    service hadoop-mapreduce-historyserver start
+  fi
 
   # start Hive processses
   if [ ! "$(ps aux | grep HiveMetaStore | wc -l)" == "2" ]; then
@@ -374,10 +460,6 @@ HIVECNF
   <value>*</value>
 </property>
 <property>
-  <name>oozie.service.WorkflowAppService.system.libpath</name>
-  <value>/usr/lib/oozie/oozie-sharelib</value>
-</property>
-<property>
   <name>use.system.libpath.for.mapreduce.and.pig.jobs</name>
   <value>true</value>
 </property>
@@ -385,16 +467,40 @@ HIVECNF
   <name>oozie.service.PurgeService.purge.old.coord.action</name>
   <value>true</value>
 </property>
+<property>
+  <name>oozie.use.system.libpath</name>
+  <value>true</value>
+</property>
+<property>
+  <name>oozie.credentials.credentialclasses</name>
+  <value>
+    hcat=com.github.bartekdobija.oozieutils.creds.TestCreds,
+    hive=com.github.bartekdobija.oozieutils.creds.TestCreds,
+    hbase=com.github.bartekdobija.oozieutils.creds.TestCreds
+  </value>
+</property>
 </configuration>
 
 OOZCNF
 
+  OOZIE_UTILS=https://github.com/bartekdobija/oozie-utils/releases/download/0.7/oozieutils-0.7.jar
+
   # create an Oozie database if not exists and upload sharelib
   if [ ! -f /var/lib/mysql/oozie/WF_JOBS.frm ]; then
+
+    mkdir -p /user/oozie/share/lib \
+      && chown -R oozie:oozie /user/oozie \
+      && rm -fR /etc/oozie/conf/hadoop-conf \
+      && ln -s /etc/hadoop/conf /etc/oozie/conf/hadoop-conf
+
     echo "Creating Oozie database" \
       && /usr/lib/oozie/bin/ooziedb.sh create -run \
-      && mkdir -p /opt/sharelib \
-      && /usr/lib/oozie/bin/oozie-setup.sh sharelib create -fs /opt/sharelib -locallib /usr/lib/oozie/oozie-sharelib
+      && chown -R oozie:oozie /var/log/oozie \
+      && sudo -u oozie /usr/lib/oozie/bin/oozie-setup.sh sharelib create \
+        -fs hdfs://localhost/user/oozie/share/lib/ \
+        -locallib /usr/lib/oozie/oozie-sharelib \
+      && rm -fR /usr/lib/oozie/libserver/oozieutils* \
+      && wget ${OOZIE_UTILS} -q -P /usr/lib/oozie/libserver/
   fi
 
   echo "registering Spark configuration in Oozie" \
@@ -404,10 +510,24 @@ OOZCNF
     service oozie start
   fi
 
+  echo "export OOZIE_URL=http://localhost:11000/oozie" > /etc/profile.d/oozie.sh
+
 SCRIPT
 
 # OS configuration
 $system_config = <<SCRIPT
+
+  # disable IPv6
+  if [ "$(grep disable_ipv6 /etc/sysctl.conf | wc -l)" == "0" ]; then
+    echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.conf \
+      && sysctl -f /etc/sysctl.conf
+  fi
+
+  # this should be a persistent config
+  ulimit -n 65536
+  ulimit -s 10240
+  ulimit -c unlimited
+
 
   DEV_USER=hadoop_oozie
   DEV_PASSWORD=hadoop
@@ -456,10 +576,10 @@ Vagrant.configure(2) do |config|
 
   config.vm.box = "boxcutter/centos66"
   config.vm.hostname = "cdh.instance.com"
-  config.vm.network :public_network, :mac => "0800DEADBEEF"
+  config.vm.network :public_network
 
   config.vm.provider "virtualbox" do |vb|
-    vb.name = "cloudera-hadoop"
+    vb.name = "dev-hadoop-env"
     vb.cpus = 4
     vb.memory = 8192
     vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
@@ -467,6 +587,7 @@ Vagrant.configure(2) do |config|
   end
 
   config.vm.provision :shell, :name => "system_config", :inline => $system_config
+  #config.vm.provision :shell, :name => "anaconda_deps", :inline => $anaconda_deps
   config.vm.provision :shell, :name => "mysql_deps", :inline => $mysql_deps
   config.vm.provision :shell, :name => "spark_deps", :inline => $spark_deps
   config.vm.provision :shell, :name => "cloudera_deps", :inline => $cloudera_deps
