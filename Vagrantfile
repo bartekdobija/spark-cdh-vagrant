@@ -16,7 +16,7 @@ SCRIPT
 # Spark dependencies
 $spark_deps = <<SCRIPT
 
-  SPARK_VER=spark-1.5.1-bin-without-hadoop
+  SPARK_VER=spark-1.6.2-bin-without-hadoop
   SPARK_LINK=/opt/spark
 
   if [ ! -e ${SPARK_LINK} ]; then
@@ -152,8 +152,10 @@ $cloudera_deps = <<SCRIPT
   CLOUDERA_REPO=http://archive.cloudera.com/cdh5/redhat/6/x86_64/cdh/cloudera-cdh5.repo
 
   # Add Cloudera repository
-  [ ! -e /etc/yum.repos.d/cloudera-cdh5.repo ] \
-    && wget ${CLOUDERA_REPO} -q -P /etc/yum.repos.d/
+  if [[ ! -e /etc/yum.repos.d/cloudera-cdh5.repo ]]; then
+    wget ${CLOUDERA_REPO} -q -P /tmp/ \
+      && awk '{ gsub("cdh/5/","cdh/5.7.1/"); print }' /tmp/cloudera-cdh5.repo > /etc/yum.repos.d/cloudera-cdh5.repo
+  fi
 
   # Cloudera seems to kill fast download ops so we throttle Yum
   if [ "$(grep throttle /etc/yum.conf | wc -l)" == "0" ]; then
@@ -161,8 +163,7 @@ $cloudera_deps = <<SCRIPT
   fi
 
   # Cloudera Hadoop installation
-  yum install -y java-1.7.0-openjdk java-1.7.0-openjdk-devel hadoop \
-  hadoop-conf-pseudo hadoop-hdfs-datanode hadoop-hdfs-journalnode  \
+  yum install -y hadoop hadoop-conf-pseudo hadoop-hdfs-datanode hadoop-hdfs-journalnode  \
   hadoop-hdfs-namenode hadoop-hdfs-secondarynamenode hadoop-hdfs-zkfc \
   hadoop-libhdfs-devel hadoop-mapreduce-historyserver hadoop-yarn-nodemanager \
   hadoop-yarn-resourcemanager zookeeper zookeeper-native zookeeper-server \
@@ -555,9 +556,18 @@ $system_config = <<SCRIPT
   fi
 
   if [ "$(grep vm.swappiness /etc/sysctl.conf | wc -l)" == "0" ]; then
-    echo "vm.swappiness=0" >> /etc/sysctl.conf && sysctl vm.swappiness=0
+    echo "vm.swappiness=10" >> /etc/sysctl.conf && sysctl vm.swappiness=10
   fi
 
+SCRIPT
+
+$javajdk = <<SCRIPT
+  if [[ ! -e /usr/java/default ]]; then
+    wget -q --no-cookies --no-check-certificate --header "Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie" "http://download.oracle.com/otn-pub/java/jdk/7u79-b15/jdk-7u79-linux-x64.rpm" \
+      && yum -y remove java-1.6* \
+      && rpm -i jdk-7u79-linux-x64.rpm
+    echo "export JAVA_HOME=/usr/java/default" > /etc/profile.d/java.sh
+  fi
 SCRIPT
 
 $information = <<SCRIPT
@@ -566,7 +576,7 @@ $information = <<SCRIPT
   echo "Namenode UI available at: http://$ip:50070"
   echo "Resource Manager UI available at: http://$ip:8088"
   echo "Oozie endpoint available at: http://$ip:11000/oozie"
-  echo "Spark 1.5 available under /opt/spark"
+  echo "Spark 1.6 available under /opt/spark"
   echo "MySQL root password: hadoop"
   echo "You may want to add the below line to /etc/hosts:"
   echo "$ip cdh.instance.com"
@@ -579,7 +589,7 @@ Vagrant.configure(2) do |config|
   config.vm.network :public_network
 
   config.vm.provider "virtualbox" do |vb|
-    vb.name = "dev-hadoop-env"
+    vb.name = "dev-spark-env"
     vb.cpus = 4
     vb.memory = 8192
     vb.customize ["modifyvm", :id, "--nicpromisc2", "allow-all"]
@@ -587,6 +597,7 @@ Vagrant.configure(2) do |config|
   end
 
   config.vm.provision :shell, :name => "system_config", :inline => $system_config
+  config.vm.provision :shell, :name => "javajdk", :inline => $javajdk
   #config.vm.provision :shell, :name => "anaconda_deps", :inline => $anaconda_deps
   config.vm.provision :shell, :name => "mysql_deps", :inline => $mysql_deps
   config.vm.provision :shell, :name => "spark_deps", :inline => $spark_deps
