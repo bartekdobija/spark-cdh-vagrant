@@ -29,9 +29,11 @@ Official Spark 1.6 (without-hadoop) does not support Hive and SqlContext. You ha
     -Phadoop-provided \
     -Phive \
     -Phive-thriftserver \
+    -Phive-provided \
     -Pyarn \
-    -DzincPort=3038 \
+    -Pnetlib-lgpl \
     -Dparquet.version=1.8.1 \
+    -DzincPort=3038 \
     -DskipTests \
     -Dmaven.javadoc.skip=true
 ```

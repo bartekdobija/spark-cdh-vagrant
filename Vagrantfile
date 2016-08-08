@@ -39,7 +39,7 @@ $spark_deps = <<SCRIPT
   echo "configuring /opt/spark/conf/spark-env.sh"
   cat << SPCNF > /opt/spark/conf/spark-env.sh
 HADOOP_CONF_DIR=/etc/hadoop/conf/
-SPARK_DIST_CLASSPATH=\\$(hadoop classpath)
+SPARK_DIST_CLASSPATH=\\$(hadoop classpath):${SPARK_LINK}/hive/lib/*
 LD_LIBRARY_PATH=\\${LD_LIBRARY_PATH}:/usr/lib/hadoop/lib/native
 SPCNF
 
@@ -105,9 +105,17 @@ SPCNF
 
 HIVECNF
 
-  echo "installing resource scheduler" \
+  echo "installing YARN shuffle jar" \
     && mkdir -p /usr/lib/hadoop-yarn/lib/ \
     && cp -f ${SPARK_LINK}/lib/spark-*-yarn-shuffle.jar /usr/lib/hadoop-yarn/lib/
+
+
+HIVE_VER=1.2.1
+if [ ! -e ${SPARK_LINK}/hive ]; then
+  wget http://mirrors.whoishostingthis.com/apache/hive/hive-${HIVE_VER}/apache-hive-${HIVE_VER}-bin.tar.gz -q -P ${SPARK_LINK} \
+    && tar zxf ${SPARK_LINK}/apache-hive-${HIVE_VER}-bin.tar.gz -C ${SPARK_LINK} \
+    && ln -s ${SPARK_LINK}/apache-hive-${HIVE_VER}-bin ${SPARK_LINK}/hive
+fi
 
 SCRIPT
 
@@ -204,6 +212,10 @@ $cloudera_deps = <<SCRIPT
 <property>
   <name>yarn.app.mapreduce.am.staging-dir</name>
   <value>/user</value>
+</property>
+<property>
+  <name>mapreduce.job.user.classpath.first</name>
+  <value>true</value>
 </property>
 </configuration>
 
