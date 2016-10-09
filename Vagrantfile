@@ -27,7 +27,8 @@ $spark_deps = <<SCRIPT
       wget http://d3kbcqa49mib13.cloudfront.net/${SPARK_VER}.tgz -q -P /tmp/
     fi
     tar zxf /tmp/${SPARK_VER}.tgz -C /opt/ \
-      && ln -s /opt/${SPARK_VER} ${SPARK_LINK}
+      && ln -s /opt/${SPARK_VER} ${SPARK_LINK} \
+      && chown -R spark:spark /opt/${SPARK_VER}
   fi
 
   [ ! -e ${SPARK_LINK} ] && echo "Spark installation has failed!" && exit 1
@@ -45,6 +46,11 @@ SPCNF
 
   echo "configuring ${SPARK_LINK}/conf/spark-defaults.conf"
   cat << SPCNF > ${SPARK_LINK}/conf/spark-defaults.conf
+# enable logging of spark application events
+spark.eventLog.enabled true
+spark.eventLog.dir hdfs:///tmp/spark-logs
+spark.history.fs.logDirectory hdfs:///tmp/spark-logs
+spark.history.fs.cleaner.enabled true
 spark.shuffle.service.enabled true
 # Execution Behavior
 spark.broadcast.blockSize 4096
@@ -116,6 +122,8 @@ if [ ! -e ${SPARK_LINK}/hive ]; then
     && tar zxf ${SPARK_LINK}/apache-hive-${HIVE_VER}-bin.tar.gz -C ${SPARK_LINK} \
     && ln -s ${SPARK_LINK}/apache-hive-${HIVE_VER}-bin ${SPARK_LINK}/hive
 fi
+
+
 
 SCRIPT
 
@@ -410,6 +418,7 @@ HIVECNF
   echo "Creating HDFS directory structure" \
     && sudo -u hdfs hdfs dfs -mkdir -p {/user/{hadoop_oozie,spark,hive/warehouse,oozie/share/lib},/tmp,/jobs,/var/log/hadoop-yarn,/user/history} \
     && sudo -u hdfs hdfs dfs -chown -R hive:hive /user/hive \
+    && sudo -u hdfs hdfs dfs -chown -R spark:spark /tmp/spark-logs \
     && sudo -u hdfs hdfs dfs -chown -R mapred:hadoop /user/history \
     && sudo -u hdfs hdfs dfs -chmod -R 1777 /user/history \
     && sudo -u hdfs hdfs dfs -chown -R oozie:oozie /user/oozie \
@@ -592,6 +601,7 @@ $information = <<SCRIPT
   echo "Namenode UI available at: http://$ip:50070"
   echo "Resource Manager UI available at: http://$ip:8088"
   echo "Oozie endpoint available at: http://$ip:11000/oozie"
+  echo "Spark historyserver available at: http://$ip:18080"
   echo "Spark 1.6 available under /opt/spark"
   echo "MySQL root password: hadoop"
   echo "You may want to add the below line to /etc/hosts:"
