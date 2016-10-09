@@ -225,6 +225,10 @@ HDPCNF
 
 <configuration>
 <property>
+  <name>yarn.nodemanager.resource.cpu-vcores</name>
+  <value>16</value>
+</property>
+<property>
   <name>yarn.nodemanager.aux-services</name>
   <value>mapreduce_shuffle,spark_shuffle</value>
 </property>
