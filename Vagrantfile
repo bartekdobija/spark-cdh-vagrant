@@ -50,6 +50,7 @@ SPCNF
 spark.eventLog.enabled true
 spark.eventLog.dir hdfs:///tmp/spark-logs
 spark.history.fs.logDirectory hdfs:///tmp/spark-logs
+spark.yarn.historyServer.address \\${hadoopconf-yarn.resourcemanager.hostname}:18080
 spark.history.fs.cleaner.enabled true
 spark.shuffle.service.enabled true
 # Execution Behavior
@@ -232,6 +233,10 @@ HDPCNF
   cat << YRNCNF > /etc/hadoop/conf/yarn-site.xml
 
 <configuration>
+<property>
+  <name>yarn.resourcemanager.hostname</name>
+  <value>cdh.instance.com</value>
+</property>
 <property>
   <name>yarn.nodemanager.resource.cpu-vcores</name>
   <value>16</value>
