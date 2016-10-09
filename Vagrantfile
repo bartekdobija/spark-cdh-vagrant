@@ -571,9 +571,9 @@ $system_config = <<SCRIPT
       && echo "${DEV_USER}  ALL=(ALL)  NOPASSWD:  ALL" > /etc/sudoers.d/hadoop_oozie
   fi
 
-  if [ "$(grep vm.swappiness /etc/sysctl.conf | wc -l)" == "0" ]; then
-    echo "vm.swappiness=10" >> /etc/sysctl.conf && sysctl vm.swappiness=10
-  fi
+#  if [ "$(grep vm.swappiness /etc/sysctl.conf | wc -l)" == "0" ]; then
+#    echo "vm.swappiness=10" >> /etc/sysctl.conf && sysctl vm.swappiness=10
+#  fi
 
 SCRIPT
 
