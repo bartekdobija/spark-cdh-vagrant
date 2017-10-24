@@ -20,6 +20,7 @@ $spark_deps = <<SCRIPT
   SPARK_LINK=/opt/spark
 
   if [ ! -e ${SPARK_LINK} ]; then
+    adduser spark
     echo "Spark installation..."
     if [ "$(ls -la /vagrant/spark/ | grep ${SPARK_VER}.tgz | wc -l)" == "1" ]; then
       cp -f /vagrant/spark/${SPARK_VER}.tgz /tmp/
@@ -117,7 +118,7 @@ HIVECNF
     && cp -f ${SPARK_LINK}/lib/spark-*-yarn-shuffle.jar /usr/lib/hadoop-yarn/lib/
 
 
-HIVE_VER=1.2.1
+HIVE_VER=1.2.2
 if [ ! -e ${SPARK_LINK}/hive ]; then
   wget http://mirrors.whoishostingthis.com/apache/hive/hive-${HIVE_VER}/apache-hive-${HIVE_VER}-bin.tar.gz -q -P ${SPARK_LINK} \
     && tar zxf ${SPARK_LINK}/apache-hive-${HIVE_VER}-bin.tar.gz -C ${SPARK_LINK} \
@@ -593,9 +594,9 @@ SCRIPT
 
 $javajdk = <<SCRIPT
   if [[ ! -e /usr/java/default ]]; then
-    wget -q --no-cookies --no-check-certificate --header "Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie" "http://download.oracle.com/otn-pub/java/jdk/7u79-b15/jdk-7u79-linux-x64.rpm" \
+    wget -q --no-cookies --no-check-certificate --header "Cookie: oraclelicense=accept-securebackup-cookie" "http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm" \
       && yum -y remove java-1.6* \
-      && rpm -i jdk-7u79-linux-x64.rpm
+      && rpm -i jdk-8u151-linux-x64.rpm
     echo "export JAVA_HOME=/usr/java/default" > /etc/profile.d/java.sh
   fi
 SCRIPT

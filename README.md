@@ -1,6 +1,6 @@
-# Spark 1.6.x & CDH 5 Vagrantfile
+# Spark 1.6.x/2.x & CDH 5 Vagrantfile
 
-Vagrantfile with the Cloudera CDH 5 & Spark 1.6.x configuration.
+Vagrantfile with the Cloudera CDH 5 & Spark 1.6.x/2.x configuration.
 The VM is provisioned with the basic configuration of HDFS, Yarn, Hive, Oozie, Spark & MySQL (Metastore DB). 
 
 After the VM has been provisioned, run Spark with the below command:
@@ -14,16 +14,38 @@ sudo -u hdfs /opt/spark/bin/spark-shell
 - Vagrant 1.7+
 - VirtualBox 5+
 - Internet connection
-- (optionally) Spark 1.6.2 without-hadoop compiled with the Hive support, see below.
+- (optionally) Spark 1.6.2/2.x without-hadoop compiled with the Hive support, see below.
 
 #### Spark with Hive
 
-Official Spark 1.6 (without-hadoop) does not support Hive and SqlContext. You have to compile your own version by downloading the Spark source code and calling the below command in the project's home directory:
+Official Spark 1.6/2.x (without-hadoop) does not support Hive and SqlContext. You have to compile your own version by downloading the Spark source code and calling the below command in the project's home directory:
 
+Spark 1.6.x
 ```sh
 ./make-distribution.sh \
     --name without-hadoop \
     --tgz \
+    -Phadoop-2.6 \
+    -Psparkr \
+    -Phadoop-provided \
+    -Phive \
+    -Phive-thriftserver \
+    -Phive-provided \
+    -Pyarn \
+    -Pnetlib-lgpl \
+    -Dparquet.version=1.8.1 \
+    -DzincPort=3038 \
+    -DskipTests \
+    -Dmaven.javadoc.skip=true
+```
+
+Spark 2.x
+```sh
+./dev/make-distribution.sh \
+    --name without-hadoop \
+    --tgz \
+    --pip \
+    --r \
     -Phadoop-2.6 \
     -Psparkr \
     -Phadoop-provided \
