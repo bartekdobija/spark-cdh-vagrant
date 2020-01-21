@@ -1,35 +1,20 @@
-# Anaconda dependencies
-$anaconda_deps = <<SCRIPT
-
-  ANACONDA_INSTALLER=https://3230d63b5fc54e62148e-c95ac804525aac4b6dba79b00b39d1d3.ssl.cf1.rackcdn.com/Anaconda-2.3.0-Linux-x86_64.sh
-
-  if [ ! -d "/usr/local/anaconda" ]; then
-    echo "Anaconda installation..." \
-      && echo "downloading binaries" \
-      && wget ${ANACONDA_INSTALLER} -q -P /tmp/ \
-      && echo "running installer" \
-      && bash /tmp/Anaconda-2.3.0-Linux-x86_64.sh -b -f -p /usr/local/anaconda
-  fi
-
-SCRIPT
-
 # Spark dependencies
 $spark_deps = <<SCRIPT
 
-  SPARK_VER=spark-1.6.2-bin-without-hadoop
+  SPARK_VER=spark-2.4.4
   SPARK_LINK=/opt/spark
 
   if [ ! -e ${SPARK_LINK} ]; then
     adduser spark
     echo "Spark installation..."
     if [ "$(ls -la /vagrant/spark/ | grep ${SPARK_VER}.tgz | wc -l)" == "1" ]; then
-      cp -f /vagrant/spark/${SPARK_VER}.tgz /tmp/
+      cp -f /vagrant/spark/${SPARK_VER}-bin-without-hadoop.tgz /tmp/
     else
-      wget http://d3kbcqa49mib13.cloudfront.net/${SPARK_VER}.tgz -q -P /tmp/
+      wget http://us.mirrors.quenda.co/apache/spark/${SPARK_VER}/${SPARK_VER}-bin-without-hadoop.tgz -q -P /tmp/
     fi
-    tar zxf /tmp/${SPARK_VER}.tgz -C /opt/ \
-      && ln -s /opt/${SPARK_VER} ${SPARK_LINK} \
-      && chown -R spark:spark /opt/${SPARK_VER}
+    tar zxf /tmp/${SPARK_VER}-bin-without-hadoop.tgz -C /opt/ \
+      && ln -s /opt/${SPARK_VER}-bin-without-hadoop ${SPARK_LINK} \
+      && chown -R spark:spark /opt/${SPARK_VER}-bin-without-hadoop
   fi
 
   [ ! -e ${SPARK_LINK} ] && echo "Spark installation has failed!" && exit 1
@@ -115,16 +100,16 @@ HIVECNF
 
   echo "installing YARN shuffle jar" \
     && mkdir -p /usr/lib/hadoop-yarn/lib/ \
-    && cp -f ${SPARK_LINK}/lib/spark-*-yarn-shuffle.jar /usr/lib/hadoop-yarn/lib/
+    && cp -f ${SPARK_LINK}/yarn/spark-*-yarn-shuffle.jar /usr/lib/hadoop-yarn/lib/
 
 
-HIVE_VER=1.2.2
+HIVE_VER=2.3.6
 if [ ! -e ${SPARK_LINK}/hive ]; then
+  echo "downloading and installing hive ${HIVE_VER} (as spark dependency)"
   wget http://mirrors.whoishostingthis.com/apache/hive/hive-${HIVE_VER}/apache-hive-${HIVE_VER}-bin.tar.gz -q -P ${SPARK_LINK} \
     && tar zxf ${SPARK_LINK}/apache-hive-${HIVE_VER}-bin.tar.gz -C ${SPARK_LINK} \
     && ln -s ${SPARK_LINK}/apache-hive-${HIVE_VER}-bin ${SPARK_LINK}/hive
 fi
-
 
 
 SCRIPT
@@ -132,15 +117,15 @@ SCRIPT
 # MySQL dependencies
 $mysql_deps = <<SCRIPT
 
-  MYSQL_REPO=https://dev.mysql.com/get/mysql-community-release-el6-5.noarch.rpm
+  MYSQL_REPO=https://dev.mysql.com/get/mysql-community-release-el7-5.noarch.rpm
   MY_CNF=/etc/my.cnf
   DEV_PASSWORD=hadoop
 
   [ ! -e /etc/yum.repos.d/mysql-community.repo ] && rpm -ivh ${MYSQL_REPO}
 
-  yum install -y mysql-community-server
+  yum install --nogpgcheck -y mysql-community-server
 
-  if [ -e /etc/init.d/mysqld ] && [ -z "$(grep -R vagrant ${MY_CNF})" ]; then
+  if [ -e /etc/systemd/system/mysql.service ] && [ -z "$(grep -R vagrant ${MY_CNF})" ]; then
     echo "# InnoDB settings" >> ${MY_CNF}
     echo "default_storage_engine = innodb" >> ${MY_CNF}
     echo "innodb_file_per_table = 1" >> ${MY_CNF}
@@ -151,28 +136,25 @@ $mysql_deps = <<SCRIPT
     echo "innodb_flush_method = O_DIRECT" >> ${MY_CNF}
     echo "innodb_log_file_size = 512M" >> ${MY_CNF}
     echo "explicit_defaults_for_timestamp = 1" >> ${MY_CNF}
-    chkconfig mysqld on \
-      && service mysqld start \
+    systemctl enable mysqld.service \
+      && systemctl start mysqld.service \
       && /usr/bin/mysqladmin -u root password "${DEV_PASSWORD}" &> /dev/null \
       && echo "# vagrant provisioned" >> ${MY_CNF}
 
     mysql -u root -p${DEV_PASSWORD} \
-      -e "create schema if not exists hive; grant all on hive.* to 'hive'@'localhost' identified by 'hive'" \
-    && mysql -u root -p${DEV_PASSWORD} \
-      -e "create schema if not exists oozie; grant all on oozie.* to 'oozie'@'localhost' identified by 'oozie'"
+      -e "create schema if not exists hive; grant all on hive.* to 'hive'@'localhost' identified by 'hive'"
   fi
 
 SCRIPT
 
-# Cloudera CDH dependencies
 $cloudera_deps = <<SCRIPT
 
-  CLOUDERA_REPO=http://archive.cloudera.com/cdh5/redhat/6/x86_64/cdh/cloudera-cdh5.repo
+  REPO_VER=6.3.2
+  CLOUDERA_REPO=https://archive.cloudera.com/cdh6/${REPO_VER}/redhat7/yum/
 
   # Add Cloudera repository
-  if [[ ! -e /etc/yum.repos.d/cloudera-cdh5.repo ]]; then
-    wget ${CLOUDERA_REPO} -q -P /tmp/ \
-      && awk '{ gsub("cdh/5/","cdh/5.7.1/"); print }' /tmp/cloudera-cdh5.repo > /etc/yum.repos.d/cloudera-cdh5.repo
+  if [[ ! -e /etc/yum.repos.d/archive.cloudera.com_cdh6_${REPO_VER}_redhat7_yum_repodata_.repo ]]; then
+    yum-config-manager --add-repo=${CLOUDERA_REPO}
   fi
 
   # Cloudera seems to kill fast download ops so we throttle Yum
@@ -181,12 +163,17 @@ $cloudera_deps = <<SCRIPT
   fi
 
   # Cloudera Hadoop installation
-  yum install -y hadoop hadoop-conf-pseudo hadoop-hdfs-datanode hadoop-hdfs-journalnode  \
+  yum install --nogpgcheck -y hadoop hadoop-conf-pseudo hadoop-hdfs-datanode hadoop-hdfs-journalnode  \
   hadoop-hdfs-namenode hadoop-hdfs-secondarynamenode hadoop-hdfs-zkfc \
   hadoop-libhdfs-devel hadoop-mapreduce-historyserver hadoop-yarn-nodemanager \
   hadoop-yarn-resourcemanager zookeeper zookeeper-native zookeeper-server \
-  oozie oozie-client kite sqoop hive hive-metastore hive-server2 hive-hcatalog \
+  sqoop hive hive-metastore hive-server2 hive-hcatalog \
   hive-jdbc avro-libs pig kite impala* openssl-devel openssl
+
+SCRIPT
+
+# Cloudera CDH dependencies
+$cloudera_config = <<SCRIPT
 
   cat << HDPCNF > /etc/hadoop/conf/mapred-site.xml
 
@@ -358,10 +345,8 @@ HDFSCNF
     && wget ${MYSQL_JDBC_SOURCE} -q -P /tmp/ \
     && echo "Installing MySQL JDBC drivers" \
     && tar zxf /tmp/${MYSQL_JDBC}.tar.gz -C /tmp/ \
-    && mkdir -p /usr/lib/oozie/libext \
     && cp /tmp/${MYSQL_JDBC}/mysql-connector-java*.jar /usr/lib/hive/lib/ \
-    && cp /tmp/${MYSQL_JDBC}/mysql-connector-java*.jar /usr/local/lib/jdbc/mysql/ \
-    && cp /tmp/${MYSQL_JDBC}/mysql-connector-java*.jar /usr/lib/oozie/libext/
+    && cp /tmp/${MYSQL_JDBC}/mysql-connector-java*.jar /usr/local/lib/jdbc/mysql/
 
   cat << HIVECNF > /etc/hive/conf/hive-site.xml
 
@@ -401,8 +386,7 @@ HIVECNF
     && chkconfig hadoop-yarn-nodemanager on \
     && chkconfig hadoop-mapreduce-historyserver on \
     && chkconfig hive-metastore on \
-    && chkconfig hive-server2 on \
-    && chkconfig oozie on
+    && chkconfig hive-server2 on
 
   # start Hadoop processses
   if [ ! "$(ps aux | grep hdfs-namenode | wc -l)" == "2" ]; then
@@ -422,13 +406,12 @@ HIVECNF
   fi
 
   echo "Creating HDFS directory structure" \
-    && sudo -u hdfs hdfs dfs -mkdir -p {/user/{hadoop_oozie,spark,hive/warehouse,oozie/share/lib},/tmp,/jobs,/var/log/hadoop-yarn,/user/history} \
+    && sudo -u hdfs hdfs dfs -mkdir -p {/user/{hadoop_user,spark,hive/warehouse/share/lib},/tmp/spark-logs,/jobs,/var/log/hadoop-yarn,/user/history} \
     && sudo -u hdfs hdfs dfs -chown -R hive:hive /user/hive \
     && sudo -u hdfs hdfs dfs -chown -R spark:spark /tmp/spark-logs \
     && sudo -u hdfs hdfs dfs -chown -R mapred:hadoop /user/history \
     && sudo -u hdfs hdfs dfs -chmod -R 1777 /user/history \
-    && sudo -u hdfs hdfs dfs -chown -R oozie:oozie /user/oozie \
-    && sudo -u hdfs hdfs dfs -chown -R hadoop_oozie:hadoop_oozie /user/hadoop_oozie \
+    && sudo -u hdfs hdfs dfs -chown -R hadoop_user:hadoop_user /user/hadoop_user \
     && sudo -u hdfs hdfs dfs -chown -R yarn:mapred /var/log/hadoop-yarn \
     && sudo -u hdfs hdfs dfs -chmod -R 1777 /
 
@@ -446,104 +429,6 @@ HIVECNF
     service hive-server2 start
   fi
 
-  # Oozie configuration
-  echo "Deploying oozie-site.xml"
-  cat << OOZCNF > /etc/oozie/conf/oozie-site.xml
-
-<configuration>
-<property>
-  <name>oozie.service.JPAService.create.db.schema</name>
-  <value>true</value>
-</property>
-<property>
-  <name>oozie.service.JPAService.validate.db.connection</name>
-  <value>true</value>
-</property>
-<property>
-  <name>oozie.service.JPAService.jdbc.driver</name>
-  <value>com.mysql.jdbc.Driver</value>
-</property>
-<property>
-  <name>oozie.service.JPAService.jdbc.url</name>
-  <value>jdbc:mysql://localhost:3306/oozie?createDatabaseIfNotExist=true</value>
-</property>
-<property>
-  <name>oozie.service.JPAService.jdbc.username</name>
-  <value>oozie</value>
-</property>
-<property>
-  <name>oozie.service.JPAService.jdbc.password</name>
-  <value>oozie</value>
-</property>
-<property>
-  <name>oozie.service.ProxyUserService.proxyuser.oozie.hosts</name>
-  <value>*</value>
-</property>
-<property>
-  <name>oozie.service.ProxyUserService.proxyuser.oozie.groups</name>
-  <value>*</value>
-</property>
-<property>
-  <name>oozie.service.ProxyUserService.proxyuser.hue.hosts</name>
-  <value>*</value>
-</property>
-<property>
-  <name>oozie.service.ProxyUserService.proxyuser.hue.groups</name>
-  <value>*</value>
-</property>
-<property>
-  <name>use.system.libpath.for.mapreduce.and.pig.jobs</name>
-  <value>true</value>
-</property>
-<property>
-  <name>oozie.service.PurgeService.purge.old.coord.action</name>
-  <value>true</value>
-</property>
-<property>
-  <name>oozie.use.system.libpath</name>
-  <value>true</value>
-</property>
-<property>
-  <name>oozie.credentials.credentialclasses</name>
-  <value>
-    hcat=com.github.bartekdobija.oozieutils.creds.TestCreds,
-    hive=com.github.bartekdobija.oozieutils.creds.TestCreds,
-    hbase=com.github.bartekdobija.oozieutils.creds.TestCreds
-  </value>
-</property>
-</configuration>
-
-OOZCNF
-
-  OOZIE_UTILS=https://github.com/bartekdobija/oozie-utils/releases/download/0.7/oozieutils-0.7.jar
-
-  # create an Oozie database if not exists and upload sharelib
-  if [ ! -f /var/lib/mysql/oozie/WF_JOBS.frm ]; then
-
-    mkdir -p /user/oozie/share/lib \
-      && chown -R oozie:oozie /user/oozie \
-      && rm -fR /etc/oozie/conf/hadoop-conf \
-      && ln -s /etc/hadoop/conf /etc/oozie/conf/hadoop-conf
-
-    echo "Creating Oozie database" \
-      && /usr/lib/oozie/bin/ooziedb.sh create -run \
-      && chown -R oozie:oozie /var/log/oozie \
-      && sudo -u oozie /usr/lib/oozie/bin/oozie-setup.sh sharelib create \
-        -fs hdfs://localhost/user/oozie/share/lib/ \
-        -locallib /usr/lib/oozie/oozie-sharelib \
-      && rm -fR /usr/lib/oozie/libserver/oozieutils* \
-      && wget ${OOZIE_UTILS} -q -P /usr/lib/oozie/libserver/
-  fi
-
-  echo "registering Spark configuration in Oozie" \
-    && ln -f -s /opt/spark/conf /etc/oozie/conf/spark-conf
-
-  if [ ! "$(ps aux | grep oozie | wc -l)" == "2" ]; then
-    service oozie start
-  fi
-
-  echo "export OOZIE_URL=http://localhost:11000/oozie" > /etc/profile.d/oozie.sh
-
 SCRIPT
 
 # OS configuration
@@ -552,8 +437,15 @@ $system_config = <<SCRIPT
   # disable IPv6
   if [ "$(grep disable_ipv6 /etc/sysctl.conf | wc -l)" == "0" ]; then
     echo "net.ipv6.conf.all.disable_ipv6=1" >> /etc/sysctl.conf \
-      && sysctl -f /etc/sysctl.conf
+      && echo "net.ipv6.conf.default.disable_ipv6=1" >> /etc/sysctl.conf \
+      && sysctl -f /etc/sysctl.conf \
+      && sysctl -p
+
+    sysctl -w net.ipv6.conf.all.disable_ipv6=1
+    sysctl -w net.ipv6.conf.default.disable_ipv6=1
+
   fi
+
 
   # this should be a persistent config
   ulimit -n 65536
@@ -561,29 +453,30 @@ $system_config = <<SCRIPT
   ulimit -c unlimited
 
 
-  DEV_USER=hadoop_oozie
+  DEV_USER=hadoop_user
   DEV_PASSWORD=hadoop
   PROXY_CONFIG=/etc/profile.d/proxy.sh
 
-  service iptables stop && chkconfig iptables off
-
-  if grep ryanair /etc/resolv.conf; then
-    echo "export http_proxy=http://internalproxy.corp.ryanair.com:3128" > ${PROXY_CONFIG} \
-      && echo "export https_proxy=http://internalproxy.corp.ryanair.com:3128" >> ${PROXY_CONFIG}
-  else
-    rm -fR ${PROXY_CONFIG}
-  fi
+  systemctl disable firewalld && systemctl stop firewalld
 
   # Add entries to /etc/hosts
-  ip=$(ifconfig eth1 | awk -v host=$(hostname) '/inet addr/ {print substr($2,6)}')
+  ip=$(ip a s eth1 | awk '/inet/ {split($2, a,"/"); print a[1] }')
   host=$(hostname)
   echo "127.0.0.1 localhost" > /etc/hosts
   echo "$ip $host" >> /etc/hosts
 
+  # disable selinux
+  sudo setenforce 0
+  sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+
+  # disable swap
+  swapoff -a
+
+
   # Add a dev user - don't worry about the password
   if ! grep ${DEV_USER} /etc/passwd; then
     echo "Creating user ${DEV_USER}" && useradd -p $(openssl passwd -1 ${DEV_PASSWORD}) ${DEV_USER} \
-      && echo "${DEV_USER}  ALL=(ALL)  NOPASSWD:  ALL" > /etc/sudoers.d/hadoop_oozie
+      && echo "${DEV_USER}  ALL=(ALL)  NOPASSWD:  ALL" > /etc/sudoers.d/${DEV_USER}
   fi
 
 #  if [ "$(grep vm.swappiness /etc/sysctl.conf | wc -l)" == "0" ]; then
@@ -592,23 +485,20 @@ $system_config = <<SCRIPT
 
 SCRIPT
 
-$javajdk = <<SCRIPT
-  if [[ ! -e /usr/java/default ]]; then
-    wget -q --no-cookies --no-check-certificate --header "Cookie: oraclelicense=accept-securebackup-cookie" "http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm" \
-      && yum -y remove java-1.6* \
-      && rpm -i jdk-8u151-linux-x64.rpm
-    echo "export JAVA_HOME=/usr/java/default" > /etc/profile.d/java.sh
-  fi
+# DNF configuration
+$yum_config = <<SCRIPT
+  rpm -i https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm 2> /dev/null
+  yum update
+  yum -y install wget curl openssl java-1.8.0-openjdk
 SCRIPT
 
 $information = <<SCRIPT
-  ip=$(ifconfig eth1 | awk -v host=$(hostname) '/inet addr/ {print substr($2,6)}')
+  ip=$(ip a s eth1 | awk '/inet/ {split($2, a,"/"); print a[1] }')
   echo "Guest IP address: $ip"
-  echo "Namenode UI available at: http://$ip:50070"
+  echo "Namenode UI available at: http://$ip:9870"
   echo "Resource Manager UI available at: http://$ip:8088"
-  echo "Oozie endpoint available at: http://$ip:11000/oozie"
   echo "Spark historyserver available at: http://$ip:18080"
-  echo "Spark 1.6 available under /opt/spark"
+  echo "Spark available under /opt/spark"
   echo "MySQL root password: hadoop"
   echo "You may want to add the below line to /etc/hosts:"
   echo "$ip cdh.instance.com"
@@ -616,7 +506,7 @@ SCRIPT
 
 Vagrant.configure(2) do |config|
 
-  config.vm.box = "boxcutter/centos66"
+  config.vm.box = "centos/7"
   config.vm.hostname = "cdh.instance.com"
   config.vm.network :public_network
 
@@ -629,11 +519,11 @@ Vagrant.configure(2) do |config|
   end
 
   config.vm.provision :shell, :name => "system_config", :inline => $system_config
-  config.vm.provision :shell, :name => "javajdk", :inline => $javajdk
-  #config.vm.provision :shell, :name => "anaconda_deps", :inline => $anaconda_deps
+  config.vm.provision :shell, :name => "yum_config", :inline => $yum_config
   config.vm.provision :shell, :name => "mysql_deps", :inline => $mysql_deps
   config.vm.provision :shell, :name => "spark_deps", :inline => $spark_deps
   config.vm.provision :shell, :name => "cloudera_deps", :inline => $cloudera_deps
+  config.vm.provision :shell, :name => "cloudera_config", :inline => $cloudera_config
   config.vm.provision :shell, :name => "information", :inline => $information
 
 end
